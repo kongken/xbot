@@ -51,6 +51,7 @@ func Init() error {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/me", bot.MatchTypeExact, meHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/hualao", bot.MatchTypeExact, hualaoHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/poster", bot.MatchTypeExact, posterHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/set", bot.MatchTypePrefix, setKeywordHandler)
 
 	for _, config := range pollConfig {
 		b.RegisterHandler(bot.HandlerTypeMessageText, config.Command, bot.MatchTypePrefix, newPollHandler(config))
@@ -113,6 +114,61 @@ func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 		logger.Error("SaveMessage error ",
 			"error", err)
 	}
+
+	// auto reply by exact keyword match
+	if update.Message != nil && update.Message.Text != "" {
+		reply, err := dao.GetKeyword(ctx, update.Message.Text)
+		if err == nil && reply != "" {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   reply,
+			})
+		}
+	}
+}
+
+func setKeywordHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	logger := log.FromContext(ctx)
+	logger.Info("setKeywordHandler",
+		"text", update.Message.Text,
+	)
+
+	text := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/set"))
+	parts := strings.Fields(text)
+	if len(parts) < 1 {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Usage: /set <keyword> <reply>",
+		})
+		return
+	}
+
+	keyword := parts[0]
+	reply := strings.TrimSpace(strings.TrimPrefix(text, keyword))
+
+	if reply == "" {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Usage: /set <keyword> <reply>",
+		})
+		return
+	}
+
+	err := dao.SetKeyword(ctx, keyword, reply)
+	if nil != err {
+		logger.Error("SetKeyword error",
+			"error", err)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Failed to set keyword",
+		})
+		return
+	}
+
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   fmt.Sprintf("Set: %s -> %s", keyword, reply),
+	})
 }
 
 func gptHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
