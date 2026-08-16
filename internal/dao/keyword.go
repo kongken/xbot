@@ -16,7 +16,7 @@ var (
 )
 
 func keywordClient() *bredis.Client {
-	return bredis.GetClient("cloud")
+	return bredis.GetClient("main")
 }
 
 func SetKeyword(ctx context.Context, keyword, reply string) error {
