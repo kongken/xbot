@@ -8,8 +8,8 @@ on:
 
 permissions:
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
-  # pull-requests: read
+  # Allow read access to pull request. Use with `only-new-issues` option.
+  pull-requests: read
 
 jobs:
   golangci:
@@ -17,12 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
           cache: false
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v7
         with:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
@@ -39,7 +39,7 @@ jobs:
           # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
-          # only-new-issues: true
+          only-new-issues: true
 
           # Optional: if set to true, then all caching functionality will be completely disabled,
           #           takes precedence over all other caching options.

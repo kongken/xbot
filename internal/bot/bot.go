@@ -51,6 +51,7 @@ func Init() error {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/me", bot.MatchTypeExact, meHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/hualao", bot.MatchTypeExact, hualaoHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/poster", bot.MatchTypeExact, posterHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/set", bot.MatchTypePrefix, setKeywordHandler)
 
 	for _, config := range pollConfig {
 		b.RegisterHandler(bot.HandlerTypeMessageText, config.Command, bot.MatchTypePrefix, newPollHandler(config))
@@ -111,6 +112,81 @@ func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	})
 	if nil != err {
 		logger.Error("SaveMessage error ",
+			"error", err)
+	}
+
+	// auto reply by exact keyword match
+	if update.Message != nil && update.Message.Text != "" {
+		reply, err := dao.GetKeyword(ctx, update.Message.Text)
+		if err == nil && reply != "" {
+			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   reply,
+			})
+			if nil != err {
+				logger.Error("SendMessage error ",
+					"error", err)
+			}
+		}
+	}
+}
+
+func setKeywordHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	logger := log.FromContext(ctx)
+	logger.Info("setKeywordHandler",
+		"text", update.Message.Text,
+	)
+
+	text := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/set"))
+	parts := strings.Fields(text)
+	if len(parts) < 1 {
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Usage: /set <keyword> <reply>",
+		})
+		if nil != err {
+			logger.Error("SendMessage error ",
+				"error", err)
+		}
+		return
+	}
+
+	keyword := parts[0]
+	reply := strings.TrimSpace(strings.TrimPrefix(text, keyword))
+
+	if reply == "" {
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Usage: /set <keyword> <reply>",
+		})
+		if nil != err {
+			logger.Error("SendMessage error ",
+				"error", err)
+		}
+		return
+	}
+
+	err := dao.SetKeyword(ctx, keyword, reply)
+	if nil != err {
+		logger.Error("SetKeyword error",
+			"error", err)
+		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Failed to set keyword",
+		})
+		if nil != err {
+			logger.Error("SendMessage error ",
+				"error", err)
+		}
+		return
+	}
+
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   fmt.Sprintf("Set: %s -> %s", keyword, reply),
+	})
+	if nil != err {
+		logger.Error("SendMessage error ",
 			"error", err)
 	}
 }

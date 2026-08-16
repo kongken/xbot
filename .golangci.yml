@@ -4,6 +4,10 @@ run:
   timeout: 5m
   modules-download-mode: readonly
   tests: false
+formatters:
+  enable:
+    - gofmt
+    - goimports
 linters:
   enable:
     - bodyclose
@@ -12,10 +16,7 @@ linters:
     - errcheck
     - copyloopvar
     - govet
-    - gosimple
-    - gofmt
     - goconst
-    - goimports
     - mnd
     - gocyclo
     - ineffassign
@@ -23,7 +24,6 @@ linters:
     - prealloc
     - revive
     - staticcheck
-    - typecheck
     - unused
     - unconvert
     - whitespace
