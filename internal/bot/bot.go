@@ -119,10 +119,14 @@ func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if update.Message != nil && update.Message.Text != "" {
 		reply, err := dao.GetKeyword(ctx, update.Message.Text)
 		if err == nil && reply != "" {
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   reply,
 			})
+			if nil != err {
+				logger.Error("SendMessage error ",
+					"error", err)
+			}
 		}
 	}
 }
@@ -136,10 +140,14 @@ func setKeywordHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	text := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/set"))
 	parts := strings.Fields(text)
 	if len(parts) < 1 {
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "Usage: /set <keyword> <reply>",
 		})
+		if nil != err {
+			logger.Error("SendMessage error ",
+				"error", err)
+		}
 		return
 	}
 
@@ -147,10 +155,14 @@ func setKeywordHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	reply := strings.TrimSpace(strings.TrimPrefix(text, keyword))
 
 	if reply == "" {
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "Usage: /set <keyword> <reply>",
 		})
+		if nil != err {
+			logger.Error("SendMessage error ",
+				"error", err)
+		}
 		return
 	}
 
@@ -158,17 +170,25 @@ func setKeywordHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if nil != err {
 		logger.Error("SetKeyword error",
 			"error", err)
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "Failed to set keyword",
 		})
+		if nil != err {
+			logger.Error("SendMessage error ",
+				"error", err)
+		}
 		return
 	}
 
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   fmt.Sprintf("Set: %s -> %s", keyword, reply),
 	})
+	if nil != err {
+		logger.Error("SendMessage error ",
+			"error", err)
+	}
 }
 
 func gptHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
