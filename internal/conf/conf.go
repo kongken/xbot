@@ -23,10 +23,12 @@ type Config struct {
 	MessageStorage string `yaml:"messageStorage"`
 }
 
+// Bot configures one Telegram identity and its enabled features.
 type Bot struct {
-	Name   string
-	Token  string
-	Enable bool
+	Name     string   `yaml:"name"`
+	Token    string   `yaml:"token"`
+	Enabled  bool     `yaml:"enabled"`
+	Features []string `yaml:"features"`
 }
 
 type S3Config struct {

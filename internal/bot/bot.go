@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
@@ -20,59 +17,6 @@ import (
 	"go.orx.me/xbot/internal/pkg/gemini"
 	"go.orx.me/xbot/internal/pkg/openai"
 )
-
-var (
-	defaultBot *bot.Bot
-)
-
-func Init() error {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
-	opts := []bot.Option{
-		bot.WithDefaultHandler(defaultHandler),
-	}
-	b, err := bot.New(conf.Conf.TelegramBotToken, opts...)
-	if nil != err {
-		return err
-	}
-
-	defaultBot = b
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/hello", bot.MatchTypePrefix, helloHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/gpt", bot.MatchTypePrefix, gptHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "gpt", bot.MatchTypePrefix, gptHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/chat", bot.MatchTypePrefix, chatHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/sum", bot.MatchTypePrefix, sumHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/ask", bot.MatchTypePrefix, askHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/huahua", bot.MatchTypePrefix, huahuaHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/save_prompt", bot.MatchTypePrefix, savePromt)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/dns_query", bot.MatchTypePrefix, dnsQueryHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/getid", bot.MatchTypeExact, getIDHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/me", bot.MatchTypeExact, meHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/hualao", bot.MatchTypeExact, hualaoHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/poster", bot.MatchTypeExact, posterHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/set", bot.MatchTypePrefix, setKeywordHandler)
-
-	for _, config := range pollConfig {
-		b.RegisterHandler(bot.HandlerTypeMessageText, config.Command, bot.MatchTypePrefix, newPollHandler(config))
-	}
-
-	resp, err := b.SetWebhook(ctx, &bot.SetWebhookParams{
-		URL: fmt.Sprintf("%s/v1/webhook", conf.Conf.Host),
-	})
-	if err != nil {
-		slog.Error("set webhook error",
-			"error", err)
-	}
-	slog.Info("set webhook success", "resp", resp)
-
-	go b.StartWebhook(context.Background())
-	return nil
-}
-
-func GetBot() *bot.Bot {
-	return defaultBot
-}
 
 func helloHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	logger := log.FromContext(ctx)
@@ -90,13 +34,19 @@ func helloHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	}
 }
 
-func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+func newDefaultHandler(features featureSet) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		defaultHandler(ctx, b, update, features)
+	}
+}
+
+func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update, features featureSet) {
 	logger := log.FromContext(ctx)
 	logger.Debug("defaultHandler",
 		"update", update.ID,
 	)
 
-	if update.PollAnswer != nil {
+	if features.has(featurePoll) && update.PollAnswer != nil {
 		PollVoteHandler(ctx, b, update)
 	}
 
@@ -106,17 +56,19 @@ func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 		metrics.MessageCounter.WithLabelValues(chatID).Inc()
 	}
 
-	// save to store
-	err := dao.GetMessageStorage().SaveMessage(ctx, &dao.Message{
-		Update: update,
-	})
-	if nil != err {
-		logger.Error("SaveMessage error ",
-			"error", err)
+	if features.has(featureAssistant) {
+		// Assistant history features read from the shared message store.
+		err := dao.GetMessageStorage().SaveMessage(ctx, &dao.Message{
+			Update: update,
+		})
+		if nil != err {
+			logger.Error("SaveMessage error ",
+				"error", err)
+		}
 	}
 
 	// auto reply by exact keyword match
-	if update.Message != nil && update.Message.Text != "" {
+	if features.has(featureUtility) && update.Message != nil && update.Message.Text != "" {
 		reply, err := dao.GetKeyword(ctx, update.Message.Text)
 		if err == nil && reply != "" {
 			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
