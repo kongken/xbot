@@ -12,9 +12,9 @@ type handlerRegistrar interface {
 	) string
 }
 
-func registerFeatureHandlers(registrar handlerRegistrar, features featureSet) {
+func registerFeatureHandlers(registrar handlerRegistrar, features featureSet, memory *memoryService) {
 	if features.has(featureAssistant) {
-		registerAssistantHandlers(registrar)
+		registerAssistantHandlers(registrar, memory)
 	}
 	if features.has(featurePoll) {
 		registerPollHandlers(registrar)
@@ -24,7 +24,7 @@ func registerFeatureHandlers(registrar handlerRegistrar, features featureSet) {
 	}
 }
 
-func registerAssistantHandlers(registrar handlerRegistrar) {
+func registerAssistantHandlers(registrar handlerRegistrar, memory *memoryService) {
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/gpt", telegram.MatchTypePrefix, gptHandler)
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "gpt", telegram.MatchTypePrefix, gptHandler)
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/chat", telegram.MatchTypePrefix, chatHandler)
@@ -34,6 +34,14 @@ func registerAssistantHandlers(registrar handlerRegistrar) {
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/save_prompt", telegram.MatchTypePrefix, savePromt)
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/hualao", telegram.MatchTypeExact, hualaoHandler)
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/poster", telegram.MatchTypeExact, posterHandler)
+	if memory != nil {
+		registrar.RegisterHandler(
+			telegram.HandlerTypeMessageText,
+			"/memory",
+			telegram.MatchTypePrefix,
+			memory.commandHandler(),
+		)
+	}
 }
 
 func registerPollHandlers(registrar handlerRegistrar) {

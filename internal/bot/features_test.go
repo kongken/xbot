@@ -59,7 +59,7 @@ func TestRegisterFeatureHandlers(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			registrar := &recordingRegistrar{}
-			registerFeatureHandlers(registrar, test.features)
+			registerFeatureHandlers(registrar, test.features, nil)
 			if !slices.Equal(registrar.patterns, test.patterns) {
 				t.Fatalf("registered patterns = %v, want %v", registrar.patterns, test.patterns)
 			}
