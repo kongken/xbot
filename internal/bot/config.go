@@ -48,6 +48,8 @@ type botConfig struct {
 	WebhookPath string
 	Features    featureSet
 	Legacy      bool
+	// MemoryChats lists the group/supergroup Chat IDs to ingest into Mem0.
+	MemoryChats []int64
 }
 
 func resolveBotConfigs(config *conf.Config) ([]botConfig, error) {
@@ -71,6 +73,7 @@ func resolveBotConfigs(config *conf.Config) ([]botConfig, error) {
 	configs := make([]botConfig, 0, len(config.Bots))
 	names := make(map[string]struct{}, len(config.Bots))
 	tokens := make(map[string]struct{}, len(config.Bots))
+	memoryOwners := make(map[int64]string)
 
 	for index, configuredBot := range config.Bots {
 		if !configuredBot.Enabled {
@@ -101,6 +104,11 @@ func resolveBotConfigs(config *conf.Config) ([]botConfig, error) {
 			return nil, fmt.Errorf("bot %q: %w", name, err)
 		}
 
+		memoryChats, err := validateMemoryChats(name, configuredBot.Memory.ChatIDs, memoryOwners, features)
+		if err != nil {
+			return nil, err
+		}
+
 		names[name] = struct{}{}
 		tokens[token] = struct{}{}
 		configs = append(configs, botConfig{
@@ -108,6 +116,7 @@ func resolveBotConfigs(config *conf.Config) ([]botConfig, error) {
 			Token:       token,
 			WebhookPath: namedWebhookPath + name,
 			Features:    features,
+			MemoryChats: memoryChats,
 		})
 	}
 
@@ -115,7 +124,51 @@ func resolveBotConfigs(config *conf.Config) ([]botConfig, error) {
 		return nil, fmt.Errorf("bots is configured but contains no enabled bots")
 	}
 
+	if hasMemoryBots(configs) {
+		mem0 := config.Mem0
+		if strings.TrimSpace(mem0.Endpoint) == "" {
+			return nil, fmt.Errorf("mem0.endpoint is required when a bot enables memory.chatIDs")
+		}
+		if !strings.HasPrefix(mem0.Endpoint, "http://") && !strings.HasPrefix(mem0.Endpoint, "https://") {
+			return nil, fmt.Errorf("mem0.endpoint must be an http(s) URL, got %q", mem0.Endpoint)
+		}
+		if strings.TrimSpace(mem0.APIKey) == "" {
+			return nil, fmt.Errorf("mem0.apiKey is required when a bot enables memory.chatIDs")
+		}
+	}
+
 	return configs, nil
+}
+
+// validateMemoryChats checks per-bot Chat ID uniqueness and cross-bot ownership.
+func validateMemoryChats(botName string, chatIDs []int64, owners map[int64]string, features featureSet) ([]int64, error) {
+	seen := make(map[int64]struct{}, len(chatIDs))
+	validated := make([]int64, 0, len(chatIDs))
+	for _, chatID := range chatIDs {
+		if _, dup := seen[chatID]; dup {
+			return nil, fmt.Errorf("bot %q lists chatID %d more than once", botName, chatID)
+		}
+		if owner, exists := owners[chatID]; exists {
+			return nil, fmt.Errorf("chatID %d is assigned to both %q and %q", chatID, owner, botName)
+		}
+		seen[chatID] = struct{}{}
+		owners[chatID] = botName
+		validated = append(validated, chatID)
+	}
+
+	if len(validated) > 0 && !features.has(featureAssistant) {
+		return nil, fmt.Errorf("bot %q enables memory.chatIDs but not the assistant feature", botName)
+	}
+	return validated, nil
+}
+
+func hasMemoryBots(configs []botConfig) bool {
+	for _, config := range configs {
+		if len(config.MemoryChats) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func parseFeatures(values []string) (featureSet, error) {

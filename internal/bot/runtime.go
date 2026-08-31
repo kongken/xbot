@@ -10,6 +10,8 @@ import (
 
 	telegram "github.com/go-telegram/bot"
 	"go.orx.me/xbot/internal/conf"
+	"go.orx.me/xbot/internal/dao"
+	"go.orx.me/xbot/internal/pkg/mem0"
 )
 
 type runningBot struct {
@@ -34,15 +36,10 @@ func Init() error {
 
 	runningBots := make([]runningBot, 0, len(configs))
 	for _, config := range configs {
-		client, err := telegram.New(
-			config.Token,
-			telegram.WithDefaultHandler(newDefaultHandler(config.Features)),
-		)
+		client, err := newBotClient(config)
 		if err != nil {
-			return fmt.Errorf("create bot %q: %w", config.Name, err)
+			return err
 		}
-
-		registerFeatureHandlers(client, config.Features)
 		runningBots = append(runningBots, runningBot{config: config, client: client})
 	}
 
@@ -68,6 +65,39 @@ func Init() error {
 	}
 
 	return nil
+}
+
+// newBotClient builds a Telegram client for one bot, wiring up Mem0 ingestion
+// when the bot is configured with memory Chats IDs.
+func newBotClient(config botConfig) (*telegram.Bot, error) {
+	opts := make([]telegram.Option, 0, 2)
+	var memory *memoryService
+
+	if len(config.MemoryChats) > 0 {
+		outbox := dao.GetMem0Outbox()
+		if outbox == nil {
+			return nil, fmt.Errorf("bot %q enables memory but the Mem0 outbox is unavailable", config.Name)
+		}
+		client, err := mem0.New(conf.Conf.Mem0.Effective())
+		if err != nil {
+			return nil, fmt.Errorf("bot %q: %w", config.Name, err)
+		}
+		memory = newMemoryService(config.Name, config.MemoryChats, outbox, client, conf.Conf.Mem0)
+		opts = append(opts, telegram.WithMiddlewares(memory.middleware()))
+	}
+
+	opts = append(opts, telegram.WithDefaultHandler(newDefaultHandler(config.Features)))
+	client, err := telegram.New(config.Token, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create bot %q: %w", config.Name, err)
+	}
+
+	registerFeatureHandlers(client, config.Features, memory)
+
+	if memory != nil {
+		go memory.runWorker(context.Background())
+	}
+	return client, nil
 }
 
 // WebhookHandler returns the webhook handler for a named bot, or the legacy bot when name is empty.

@@ -16,7 +16,19 @@ var ErrNoStorage = errors.New("no message storage configured")
 func Init(ctx context.Context) error {
 	log.Println("Initializing data access layer...")
 
-	InitMongo(context.Background())
+	if err := InitMongo(context.Background()); err != nil {
+		if hasMem0Ingestion() {
+			return fmt.Errorf("mem0 ingestion requires mongo: %w", err)
+		}
+		log.Printf("Warning: mongo unavailable (%v); continuing without it", err)
+	}
+
+	if hasMem0Ingestion() && db != nil {
+		if err := InitMem0Outbox(context.Background()); err != nil {
+			return fmt.Errorf("init mem0 outbox: %w", err)
+		}
+		log.Println("Mem0 outbox initialized")
+	}
 
 	// Message storage configuration
 	storage := conf.Conf.MessageStorage
@@ -42,4 +54,14 @@ func Init(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// hasMem0Ingestion reports whether any enabled bot configures memory Chat IDs.
+func hasMem0Ingestion() bool {
+	for _, bot := range conf.Conf.Bots {
+		if len(bot.Memory.ChatIDs) > 0 {
+			return true
+		}
+	}
+	return false
 }
