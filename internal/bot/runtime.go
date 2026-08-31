@@ -70,7 +70,7 @@ func Init() error {
 // newBotClient builds a Telegram client for one bot, wiring up Mem0 ingestion
 // when the bot is configured with memory Chats IDs.
 func newBotClient(config botConfig) (*telegram.Bot, error) {
-	opts := make([]telegram.Option, 0, 2)
+	var opts []telegram.Option
 	var memory *memoryService
 
 	if len(config.MemoryChats) > 0 {

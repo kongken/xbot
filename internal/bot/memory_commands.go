@@ -148,7 +148,7 @@ func (m *memoryService) fresh(ctx context.Context, b *bot.Bot, update *models.Up
 			"agent_id": "xbot:" + m.botName,
 			"run_id":   mem0RunID(chatID),
 		},
-		TopK: 5,
+		TopK: mem0FreshContextTopK,
 	}); memErr == nil {
 		memContext = mems
 	}
@@ -205,8 +205,8 @@ func (m *memoryService) parseFreshWindow(parts []string) time.Duration {
 }
 
 func formatWindow(d time.Duration) string {
-	if d >= 24*time.Hour {
-		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+	if d >= time.Duration(hoursPerDay)*time.Hour {
+		return fmt.Sprintf("%dd", int(d/(time.Duration(hoursPerDay)*time.Hour)))
 	}
 	return fmt.Sprintf("%dh", int(d/time.Hour))
 }

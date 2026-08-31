@@ -77,6 +77,19 @@ const (
 
 	outcomeSuccess = "success"
 	outcomeError   = "error"
+
+	// captureSaveTimeout bounds the outbox write so webhook handling is never
+	// held open by a slow database.
+	captureSaveTimeout = 5 * time.Second
+	defaultWorkerTick  = 30 * time.Second
+	tickDivisor        = 10
+	maxBackoffSteps    = 5
+	jitterDivisor      = 2
+
+	// mem0FreshContextTopK caps the optional long-term context search for
+	// /memory fresh.
+	mem0FreshContextTopK = 5
+	hoursPerDay          = 24
 )
 
 // summarizeFunc produces an AI response for a system prompt and input text.
@@ -223,7 +236,7 @@ func (m *memoryService) capture(ctx context.Context, update *models.Update) {
 	}
 	// Use a detached short-lived context: webhook cancellation must not lose a
 	// durable enqueue.
-	saveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	saveCtx, cancel := context.WithTimeout(context.Background(), captureSaveTimeout)
 	defer cancel()
 	if err := m.outbox.Save(saveCtx, event); err != nil {
 		log.FromContext(ctx).Error("mem0 outbox save failed",
@@ -254,9 +267,9 @@ func (m *memoryService) runWorker(ctx context.Context) {
 
 func workerTick(interval time.Duration) time.Duration {
 	if interval <= 0 {
-		interval = 30 * time.Second
+		interval = defaultWorkerTick
 	}
-	t := interval / 10
+	t := interval / tickDivisor
 	if t < time.Second {
 		t = time.Second
 	}
@@ -449,11 +462,11 @@ func backoffFor(attempts int) time.Duration {
 	if attempts < 0 {
 		attempts = 0
 	}
-	if attempts > 5 {
-		attempts = 5
+	if attempts > maxBackoffSteps {
+		attempts = maxBackoffSteps
 	}
 	base := time.Duration(1<<uint(attempts)) * time.Second
-	jitter := time.Duration(rand.Intn(int(base / 2)))
+	jitter := time.Duration(rand.Intn(int(base / jitterDivisor)))
 	wait := base + jitter
 	if wait > time.Minute {
 		wait = time.Minute

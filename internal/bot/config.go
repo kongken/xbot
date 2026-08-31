@@ -141,7 +141,12 @@ func resolveBotConfigs(config *conf.Config) ([]botConfig, error) {
 }
 
 // validateMemoryChats checks per-bot Chat ID uniqueness and cross-bot ownership.
-func validateMemoryChats(botName string, chatIDs []int64, owners map[int64]string, features featureSet) ([]int64, error) {
+func validateMemoryChats(
+	botName string,
+	chatIDs []int64,
+	owners map[int64]string,
+	features featureSet,
+) ([]int64, error) {
 	seen := make(map[int64]struct{}, len(chatIDs))
 	validated := make([]int64, 0, len(chatIDs))
 	for _, chatID := range chatIDs {

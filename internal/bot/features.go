@@ -35,7 +35,12 @@ func registerAssistantHandlers(registrar handlerRegistrar, memory *memoryService
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/hualao", telegram.MatchTypeExact, hualaoHandler)
 	registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/poster", telegram.MatchTypeExact, posterHandler)
 	if memory != nil {
-		registrar.RegisterHandler(telegram.HandlerTypeMessageText, "/memory", telegram.MatchTypePrefix, memory.commandHandler())
+		registrar.RegisterHandler(
+			telegram.HandlerTypeMessageText,
+			"/memory",
+			telegram.MatchTypePrefix,
+			memory.commandHandler(),
+		)
 	}
 }
 
