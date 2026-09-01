@@ -270,6 +270,15 @@ func (m *memoryService) reply(ctx context.Context, b *bot.Bot, update *models.Up
 		params.Text = bot.EscapeMarkdown(text)
 	}
 	if _, err := b.SendMessage(ctx, params); err != nil {
+		if markdown && strings.Contains(err.Error(), "can't parse entities") {
+			params.ParseMode = ""
+			params.Text = text
+			_, fallbackErr := b.SendMessage(ctx, params)
+			if fallbackErr == nil {
+				return
+			}
+			err = fmt.Errorf("markdown send failed: %w; plain text fallback failed: %v", err, fallbackErr)
+		}
 		log.FromContext(ctx).Error("mem0 reply failed", "bot", m.botName, "error", err)
 	}
 }

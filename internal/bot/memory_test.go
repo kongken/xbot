@@ -3,6 +3,8 @@ package bot
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"sync"
 	"testing"
@@ -46,6 +48,54 @@ func TestRegisterAssistantHandlersAddsMemoryCommand(t *testing.T) {
 	registerAssistantHandlers(registrar, m)
 	if !slices.Contains(registrar.patterns, "/memory") {
 		t.Fatalf("registered patterns = %v, want /memory", registrar.patterns)
+	}
+}
+
+func TestReplyFallsBackToPlainTextWhenMarkdownIsRejected(t *testing.T) {
+	var requests []struct {
+		text      string
+		parseMode string
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bot1:token/sendMessage" {
+			t.Errorf("request path = %q, want sendMessage", r.URL.Path)
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("ParseMultipartForm() error = %v", err)
+			return
+		}
+		requests = append(requests, struct {
+			text      string
+			parseMode string
+		}{
+			text:      r.FormValue("text"),
+			parseMode: r.FormValue("parse_mode"),
+		})
+		w.Header().Set("Content-Type", "application/json")
+		if r.FormValue("parse_mode") == string(models.ParseModeMarkdown) {
+			_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"Bad Request: can't parse entities: Character '#' is reserved and must be escaped with the preceding '\\'"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1}}`))
+	}))
+	defer server.Close()
+
+	b, err := telegram.New("1:token", telegram.WithServerURL(server.URL), telegram.WithSkipGetMe())
+	if err != nil {
+		t.Fatalf("telegram.New() error = %v", err)
+	}
+
+	m, _, _ := newTestService()
+	m.reply(context.Background(), b, buildUpdate(-1001, models.ChatTypeSupergroup, user(1, "A"), "", ""), "1. topic #1", true)
+
+	if len(requests) != 2 {
+		t.Fatalf("send requests = %d, want 2", len(requests))
+	}
+	if requests[0].text != "1. topic #1" || requests[0].parseMode != string(models.ParseModeMarkdown) {
+		t.Fatalf("first request = %+v, want raw MarkdownV2", requests[0])
+	}
+	if requests[1].text != "1. topic #1" || requests[1].parseMode != "" {
+		t.Fatalf("fallback request = %+v, want plain text", requests[1])
 	}
 }
 
