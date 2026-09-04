@@ -3,13 +3,18 @@ package dao
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	bredis "butterfly.orx.me/core/store/redis"
 )
 
 const (
-	keywordsKey = "xbot:keywords"
+	keywordsKeyPrefix = "xbot:keywords"
 )
+
+func keywordsKey(chatID int64) string {
+	return fmt.Sprintf("%s:%d", keywordsKeyPrefix, chatID)
+}
 
 var (
 	// ErrNoRedis is returned when the redis client is not configured.
@@ -20,20 +25,20 @@ func keywordClient() *bredis.Client {
 	return bredis.GetClient("main")
 }
 
-// SetKeyword stores the keyword->reply mapping in redis.
-func SetKeyword(ctx context.Context, keyword, reply string) error {
+// SetKeyword stores the keyword->reply mapping in redis, scoped to the given chat.
+func SetKeyword(ctx context.Context, chatID int64, keyword, reply string) error {
 	c := keywordClient()
 	if c == nil {
 		return ErrNoRedis
 	}
-	return c.HSet(ctx, keywordsKey, keyword, reply).Err()
+	return c.HSet(ctx, keywordsKey(chatID), keyword, reply).Err()
 }
 
-// GetKeyword returns the exact-match reply for the given keyword.
-func GetKeyword(ctx context.Context, keyword string) (string, error) {
+// GetKeyword returns the exact-match reply for the given keyword in the given chat.
+func GetKeyword(ctx context.Context, chatID int64, keyword string) (string, error) {
 	c := keywordClient()
 	if c == nil {
 		return "", ErrNoRedis
 	}
-	return c.HGet(ctx, keywordsKey, keyword).Result()
+	return c.HGet(ctx, keywordsKey(chatID), keyword).Result()
 }

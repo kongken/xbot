@@ -69,7 +69,7 @@ func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update, feat
 
 	// auto reply by exact keyword match
 	if features.has(featureUtility) && update.Message != nil && update.Message.Text != "" {
-		reply, err := dao.GetKeyword(ctx, update.Message.Text)
+		reply, err := dao.GetKeyword(ctx, update.Message.Chat.ID, update.Message.Text)
 		if err == nil && reply != "" {
 			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
@@ -118,7 +118,7 @@ func setKeywordHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 		return
 	}
 
-	err := dao.SetKeyword(ctx, keyword, reply)
+	err := dao.SetKeyword(ctx, update.Message.Chat.ID, keyword, reply)
 	if nil != err {
 		logger.Error("SetKeyword error",
 			"error", err)
