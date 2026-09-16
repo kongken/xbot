@@ -19,7 +19,6 @@ import (
 
 const (
 	defaultMaxResponseBytes = 2 << 20 // 2 MiB
-	defaultTimeout          = 10 * time.Second
 	maxErrorDetailBytes     = 4096
 	truncateErrorBytes      = 1000
 	maxTokenRun             = 32
@@ -106,13 +105,16 @@ func (e *APIError) Error() string {
 
 // Client is a Mem0 REST client.
 type Client struct {
-	endpoint string
-	apiKey   string
-	http     *http.Client
+	endpoint      string
+	apiKey        string
+	http          *http.Client
+	searchTimeout time.Duration
+	writeTimeout  time.Duration
 }
 
 // New builds a Mem0 client from configuration.
 func New(cfg conf.Mem0) (*Client, error) {
+	cfg = cfg.Effective()
 	endpoint := strings.TrimRight(strings.TrimSpace(cfg.Endpoint), "/")
 	if endpoint == "" {
 		return nil, errors.New("mem0: endpoint is required")
@@ -124,26 +126,25 @@ func New(cfg conf.Mem0) (*Client, error) {
 		return nil, errors.New("mem0: apiKey is required")
 	}
 
-	timeout := cfg.RequestTimeout.TimeDuration()
-	if timeout <= 0 {
-		timeout = defaultTimeout
-	}
-
 	return &Client{
-		endpoint: endpoint,
-		apiKey:   strings.TrimSpace(cfg.APIKey),
-		http: &http.Client{
-			Timeout: timeout,
-		},
+		endpoint:      endpoint,
+		apiKey:        strings.TrimSpace(cfg.APIKey),
+		http:          &http.Client{},
+		searchTimeout: cfg.RequestTimeout.TimeDuration(),
+		writeTimeout:  cfg.WriteTimeout.TimeDuration(),
 	}, nil
 }
 
 // NewWithHTTPClient builds a client using an injected HTTP client (for tests).
+// Operation defaults still apply; the injected client may impose a shorter timeout.
 func NewWithHTTPClient(endpoint, apiKey string, httpClient *http.Client) *Client {
+	cfg := (conf.Mem0{}).Effective()
 	return &Client{
-		endpoint: strings.TrimRight(endpoint, "/"),
-		apiKey:   apiKey,
-		http:     httpClient,
+		endpoint:      strings.TrimRight(endpoint, "/"),
+		apiKey:        apiKey,
+		http:          httpClient,
+		searchTimeout: cfg.RequestTimeout.TimeDuration(),
+		writeTimeout:  cfg.WriteTimeout.TimeDuration(),
 	}
 }
 
@@ -174,7 +175,7 @@ func (c *Client) Add(ctx context.Context, req AddRequest) (AddResult, error) {
 	}
 
 	var result AddResult
-	if err := c.doJSON(ctx, http.MethodPost, "/memories", payload, &result); err != nil {
+	if err := c.doJSON(ctx, c.writeTimeout, http.MethodPost, "/memories", payload, &result); err != nil {
 		return AddResult{}, err
 	}
 	return result, nil
@@ -192,7 +193,7 @@ func (c *Client) Search(ctx context.Context, req SearchRequest) ([]Memory, error
 	payload := searchPayload(req)
 
 	var result SearchResult
-	if err := c.doJSON(ctx, http.MethodPost, "/search", payload, &result); err != nil {
+	if err := c.doJSON(ctx, c.searchTimeout, http.MethodPost, "/search", payload, &result); err != nil {
 		return nil, err
 	}
 	if result.Results == nil {
@@ -201,7 +202,10 @@ func (c *Client) Search(ctx context.Context, req SearchRequest) ([]Memory, error
 	return result.Results, nil
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, payload any, out any) error {
+func (c *Client) doJSON(ctx context.Context, timeout time.Duration, method, path string, payload any, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("mem0: encoding request: %w", err)

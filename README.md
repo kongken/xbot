@@ -57,9 +57,10 @@ mem0:
   apiKey: <secret>
   infer: true            # extract durable facts (default true)
   batchSize: 20          # flush after this many messages
-  flushInterval: 30s     # flush at least this often for quiet chats
+  flushInterval: 30s     # time threshold for flushing quiet chats
   maxBatchBytes: 32768   # flush earlier once a batch reaches this payload size
-  requestTimeout: 10s
+  requestTimeout: 10s    # search request timeout
+  writeTimeout: 60s      # background POST /memories timeout
   maxAttempts: 8         # retries before dead-lettering a batch
   topK: 10               # memories returned by searches
   userProfilesEnabled: true   # per-sender projection backing /memory profile
@@ -84,8 +85,18 @@ Behavior:
   `run_id: telegram-chat:<chat-id>` so different bots and groups never mix.
 - Bot commands (text starting with `/`) and bot-authored messages are not
   ingested.
-- Ingestion never blocks message handling and is fail-open: if Mem0 is down,
-  messages stay queued in MongoDB and are flushed after recovery.
+- Message capture waits for the MongoDB enqueue (bounded to 5 seconds), not for
+  Mem0 inference. A background worker sends batches; failed writes remain queued
+  for retry with backoff until they succeed or reach the dead-letter policy.
+- Writes default to 60 seconds (`mem0.writeTimeout`); searches retain the
+  10-second default (`mem0.requestTimeout`). Existing `requestTimeout` overrides
+  now apply only to searches: set `writeTimeout` explicitly to retain a previous
+  write limit. Omitted or nonpositive values use each operation's default.
+  Caller cancellation and earlier deadlines still take precedence.
+- A longer write timeout does not add concurrency or bypass the durable outbox.
+  Slow writes can delay later batches, so monitor successful delivery and queue
+  backlog, not just error counts. A timeout does not prove Mem0 rejected the
+  request; retrying an accepted request can repeat inference.
 - `/memory profile` summarizes the requesting user's group-scoped memory profile.
 - `/memory fresh [24h|3d|7d]` summarizes recent activity in the current group.
 

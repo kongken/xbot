@@ -2,6 +2,7 @@ package conf
 
 import (
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -112,5 +113,34 @@ func TestMem0EffectiveKeepsExplicitValues(t *testing.T) {
 	}
 	if effective.BatchSize != 3 || effective.TopK != 2 {
 		t.Fatalf("unexpected preserved values: %+v", effective)
+	}
+}
+
+func TestMem0TimeoutDefaultsAndOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		yaml       string
+		wantSearch time.Duration
+		wantWrite  time.Duration
+	}{
+		{"omitted", "{}", 10 * time.Second, 60 * time.Second},
+		{"existing request timeout", "requestTimeout: 3s", 3 * time.Second, 60 * time.Second},
+		{"write timeout only", "writeTimeout: 90s", 10 * time.Second, 90 * time.Second},
+		{"both explicit", "requestTimeout: 7s\nwriteTimeout: 2m", 7 * time.Second, 2 * time.Minute},
+		{"nonpositive", "requestTimeout: 0s\nwriteTimeout: -1s", 10 * time.Second, 60 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg Mem0
+			if err := yaml.Unmarshal([]byte(tc.yaml), &cfg); err != nil {
+				t.Fatalf("decode config: %v", err)
+			}
+			effective := cfg.Effective()
+			if got := effective.RequestTimeout.TimeDuration(); got != tc.wantSearch {
+				t.Errorf("requestTimeout = %v, want %v", got, tc.wantSearch)
+			}
+			if got := effective.WriteTimeout.TimeDuration(); got != tc.wantWrite {
+				t.Errorf("writeTimeout = %v, want %v", got, tc.wantWrite)
+			}
+		})
 	}
 }

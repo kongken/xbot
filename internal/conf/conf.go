@@ -15,6 +15,7 @@ const (
 	defaultFlushInterval  = 30 * time.Second
 	defaultMaxBatchBytes  = 32 * 1024
 	defaultRequestTimeout = 10 * time.Second
+	defaultWriteTimeout   = time.Minute
 	defaultMaxAttempts    = 8
 	defaultTopK           = 10
 )
@@ -83,7 +84,8 @@ type Mem0 struct {
 	BatchSize      int      `yaml:"batchSize"`
 	FlushInterval  Duration `yaml:"flushInterval"`
 	MaxBatchBytes  int      `yaml:"maxBatchBytes"`
-	RequestTimeout Duration `yaml:"requestTimeout"`
+	RequestTimeout Duration `yaml:"requestTimeout"` // Search timeout; writes use WriteTimeout.
+	WriteTimeout   Duration `yaml:"writeTimeout"`
 	MaxAttempts    int      `yaml:"maxAttempts"`
 	TopK           int      `yaml:"topK"`
 	// UserProfilesEnabled writes a per-sender projection used by /memory profile.
@@ -103,6 +105,9 @@ func (m Mem0) Effective() Mem0 {
 	}
 	if m.RequestTimeout.TimeDuration() <= 0 {
 		m.RequestTimeout = Duration(defaultRequestTimeout)
+	}
+	if m.WriteTimeout.TimeDuration() <= 0 {
+		m.WriteTimeout = Duration(defaultWriteTimeout)
 	}
 	if m.MaxAttempts <= 0 {
 		m.MaxAttempts = defaultMaxAttempts
