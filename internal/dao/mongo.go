@@ -17,6 +17,7 @@ var (
 	promtsColl   *mongo.Collection
 	messagesColl *mongo.Collection
 	pollColl     *mongo.Collection
+	botsColl     *mongo.Collection
 )
 
 type Promt struct {
@@ -36,6 +37,7 @@ func InitMongo(ctx context.Context) error {
 	promtsColl = db.Database(conf.Conf.DBName).Collection("promts")
 	messagesColl = db.Database(conf.Conf.DBName).Collection("messages")
 	pollColl = db.Database(conf.Conf.DBName).Collection("pulls")
+	botsColl = db.Database(conf.Conf.DBName).Collection("bots")
 
 	return nil
 }

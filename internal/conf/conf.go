@@ -21,12 +21,16 @@ type Config struct {
 	S3            S3Config `yaml:"s3Config"`
 
 	MessageStorage string `yaml:"messageStorage"`
+
+	// AdminToken is the bearer token protecting /v1/admin APIs.
+	// The admin API is disabled when it is empty.
+	AdminToken string `yaml:"adminToken"`
 }
 
 type Bot struct {
-	Name   string
-	Token  string
-	Enable bool
+	Name   string `yaml:"name"`
+	Token  string `yaml:"token"`
+	Enable bool   `yaml:"enable"`
 }
 
 type S3Config struct {

@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
@@ -21,23 +18,8 @@ import (
 	"go.orx.me/xbot/internal/pkg/openai"
 )
 
-var (
-	defaultBot *bot.Bot
-)
-
-func Init() error {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
-	opts := []bot.Option{
-		bot.WithDefaultHandler(defaultHandler),
-	}
-	b, err := bot.New(conf.Conf.TelegramBotToken, opts...)
-	if nil != err {
-		return err
-	}
-
-	defaultBot = b
+// registerHandlers registers all command handlers on a bot instance.
+func registerHandlers(b *bot.Bot) {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/hello", bot.MatchTypePrefix, helloHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/gpt", bot.MatchTypePrefix, gptHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "gpt", bot.MatchTypePrefix, gptHandler)
@@ -56,22 +38,6 @@ func Init() error {
 	for _, config := range pollConfig {
 		b.RegisterHandler(bot.HandlerTypeMessageText, config.Command, bot.MatchTypePrefix, newPollHandler(config))
 	}
-
-	resp, err := b.SetWebhook(ctx, &bot.SetWebhookParams{
-		URL: fmt.Sprintf("%s/v1/webhook", conf.Conf.Host),
-	})
-	if err != nil {
-		slog.Error("set webhook error",
-			"error", err)
-	}
-	slog.Info("set webhook success", "resp", resp)
-
-	go b.StartWebhook(context.Background())
-	return nil
-}
-
-func GetBot() *bot.Bot {
-	return defaultBot
 }
 
 func helloHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
